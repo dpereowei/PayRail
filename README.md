@@ -1,0 +1,5 @@
+What am I building here?
+
+Well I'm sure you read "PayRail" and thought "Yeah, another generic fintech/payment gateway". I want you to disregard the payment part, that's trash. I've just put together a bunch of dumb FastAPI apps and called them microservices, that's not what I set out to build. What this actually is, is a platform. The Architecture, Observanbility, fault tolerance is what you should be focused on. Essentially this is a checklist for any serious MFB, Payment gateway, FinTech company that needs help in Network and Infrastructure design.
+
+If you've read up till this point, you already know everything you need to know about this project. Everything else is a boring breakdown of tools used, decisions behind tool choices, simulated failures, behaviours and remediations as well as full documentation of unforseen challenges and Solutions I used. 
