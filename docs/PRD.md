@@ -2,13 +2,15 @@
 
 **Status:** Draft v1.0 <br>
 **Owner:** Pereowei Daniel <br>
-**Purpose:** Portfolio project demonstrating platform engineering, DevSecOps, and SRE incident-response capability through a simulated payment-processing microservice stack on EKS.
+**Purpose:** Portfolio project demonstrating platform engineering, DevSecOps, and SRE incident-response capability through a simulated payment-processing microservice stack using LocalStack, Kind, and AWS-compatible Terraform.
 
 ---
 
 ## 1. Executive Summary
 
-PayRail is a minimal but production-shaped payment/settlement system (two services, real AWS infrastructure) built specifically to generate, detect, diagnose, and document realistic distributed-systems incidents. The infrastructure is the means. The incidents and their runbooks, traces, burn-rate calculations, and postmortems are the product.
+PayRail is a minimal but production-shaped payment/settlement system built specifically to generate, detect, diagnose, and document realistic distributed-systems incidents. The infrastructure is the means. The incidents and their runbooks, traces, burn-rate calculations, and postmortems are the product.
+
+The default implementation target is local-first: Terraform talks to LocalStack for AWS-shaped infrastructure, while Kubernetes workloads run on Kind. Real AWS remains an optional smoke-test target, not the day-to-day development environment.
 
 **Guiding principle for every scope decision below:** if a feature does not directly produce an interview-worthy artifact (a postmortem, a runbook, a burn-rate chart, a policy-prevented incident), it does not get built.
 
@@ -18,7 +20,8 @@ PayRail is a minimal but production-shaped payment/settlement system (two servic
 
 The project is "done" when the following exist and can be demonstrated:
 
-- A working `payment-api` → `ledger-api` settlement flow, deployed via GitOps (ArgoCD) to EKS
+- A working `payment-api` → `ledger-api` settlement flow, deployed via GitOps (ArgoCD) to Kind
+- AWS-compatible infrastructure applied against LocalStack by default
 - Three enforced Kyverno policies, with evidence that at least one of them prevents a real incident
 - One precisely defined SLO with a calculated error budget and multi-window, multi-burn-rate alerting
 - **Four** fully documented incidents, each with: alert, investigation (metrics + trace), runbook, postmortem (including burn-rate consumption), and remediation
@@ -52,7 +55,7 @@ If a future iteration wants any of the above, it's a "v2" decision, made only af
   - Verifies a signature (HMAC) on the payload
   - Validates an idempotency key (rejects/handles duplicate deliveries)
   - Updates the ledger record to `SETTLED`
-- Backed by RDS (Postgres, `db.t3.micro`)
+- Backed by Postgres locally, with an RDS-shaped infrastructure path for AWS-compatible validation
 - Exposes Prometheus metrics + OpenTelemetry traces
 
 ### 3.2 Flow
@@ -74,24 +77,23 @@ This flow is the basis for incident #2 (Section 6).
 | Stage | Environment | Rationale |
 |---|---|---|
 | Application development | Kind | Fast iteration, no cloud cost |
-| Platform validation (IRSA, ArgoCD, Kyverno) | EKS | Validate against real AWS primitives |
-| Chaos testing (all 4 incidents) | EKS | Failure modes (SG, IAM, RDS) only exist on real AWS |
-| Demo recording | EKS | Same environment as chaos testing no separate "demo" buildout |
+| AWS-shaped infrastructure validation | LocalStack | Exercise Terraform against AWS-compatible APIs without AWS spend |
+| Kubernetes platform validation | Kind | Validate ArgoCD, Kyverno, rollouts, services, and incident drills locally |
+| Optional final smoke | Real AWS | Explicit opt-in only if the cost is acceptable |
 
 ---
 
 ## 4. Infrastructure
 
-- **IaC:** Terraform VPC, EKS cluster, IRSA/OIDC provider, managed node group, RDS instance, security groups, Secrets Manager entries
-- **GitOps:** ArgoCD `git push` → sync → deploy is the success criterion for Phase 1
-- **Database:** RDS Postgres `db.t3.micro`, single-AZ, used by `ledger-api`
+- **IaC:** Terraform VPC, IAM/IRSA-shaped roles, RDS-shaped database resources, security groups, and Secrets Manager entries against LocalStack by default
+- **GitOps:** ArgoCD `git push` → sync → deploy into Kind is the success criterion for Phase 1
+- **Database:** LocalStack-modeled RDS/Postgres shape for infrastructure; local Postgres container can back the running `ledger-api` when actual database behavior is needed
 
 ### Cost Management (mandatory, not optional)
 
-- EKS control plane is billed hourly regardless of usage destroy the cluster (`terraform destroy`) at the end of each working session unless actively in the Chaos/Demo phase
-- Track the EKS Kubernetes version against the standard-support calendar; do not let it lapse into extended support (cost can increase ~6x)
-- RDS instance: stop or destroy outside of active incident-testing sessions
-- Maintain a running cost log in the repo (`docs/cost-log.md`) this doubles as evidence of cost-awareness, a real platform-engineering competency
+- No real AWS resources should be created by default; LocalStack is the normal infrastructure target
+- Any real AWS run must be explicit, time-boxed, and followed by `terraform destroy`
+- Maintain a running cost log in the repo (`docs/cost-log.md`) if any real AWS smoke tests are performed this doubles as evidence of cost-awareness, a real platform-engineering competency
 
 ---
 
@@ -156,11 +158,11 @@ For each incident, the following artifacts are **mandatory deliverables**:
 - Demonstrates: queued/retried settlement callbacks, idempotency handling on recovery, SLO burn during the outage window
 - **Narrative payoff:** domain-specific async-callback failure, directly tied to real settlement-flow operations
 
-### Incident 3 RDS Security Group Misconfiguration
+### Incident 3 Database Connectivity Misconfiguration
 
-- Modify the security group rule so `ledger-api` cannot reach RDS
+- Modify the security group-shaped rule or local network configuration so `ledger-api` cannot reach the database
 - Demonstrates: connection-pool exhaustion, error-rate spike, trace showing failure at the DB call, time-to-detect via alert
-- **Narrative payoff:** realistic "routine hardening pass broke prod" story one of the most common real-world EKS/AWS incidents
+- **Narrative payoff:** realistic "routine hardening pass broke prod" story common to Kubernetes and AWS-backed systems
 
 ### Incident 4 Bad Deployment / ArgoCD Rollback
 
@@ -178,7 +180,7 @@ Incident 1's "before" run **must happen before or during Phase 4** (policy rollo
 
 ## 9. Documentation Deliverables (beyond the per-incident artifacts)
 
-- `README.md` architecture overview, diagram, "why this stack" decision log (Kyverno vs OPA/Gatekeeper, Grafana Cloud vs self-hosted, EKS vs Kind, RDS sizing)
+- `README.md` architecture overview, diagram, "why this stack" decision log (Kyverno vs OPA/Gatekeeper, Grafana Cloud vs self-hosted, LocalStack vs real AWS, Kind vs EKS, RDS/local Postgres tradeoff)
 - `docs/cost-log.md` running infrastructure cost tracking
 - `docs/slo.md` SLO definition, error budget math, burn-rate alert configuration
 - 4x `docs/incidents/INC-00X-*.md` full artifact set per Section 7
@@ -189,8 +191,8 @@ Incident 1's "before" run **must happen before or during Phase 4** (policy rollo
 
 | Phase | Scope | Notes |
 |---|---|---|
-| 1 | Terraform: VPC, EKS, IRSA, RDS, ArgoCD bootstrap | Success = `git push` → ArgoCD sync → app deployed. Budget 1.5–2 weeks; IRSA/OIDC debugging is the likely time sink. |
-| 2 | `payment-api` + `ledger-api`, settlement-webhook flow, RDS integration | Simple, no extra business logic |
+| 1 | Terraform: LocalStack VPC/IAM/RDS-shaped resources, Kind cluster, ArgoCD bootstrap | Success = `git push` → ArgoCD sync → app deployed locally. Budget 1.5–2 weeks; local GitOps and policy wiring are the likely time sinks. |
+| 2 | `payment-api` + `ledger-api`, settlement-webhook flow, Postgres integration | Simple, no extra business logic |
 | 3 | OpenTelemetry → Grafana Cloud (metrics + traces), define the one SLO, configure fast/slow burn-rate alerts | |
 | 4 | Kyverno: 3 policies. Run Incident 1 "before" prior to/during this phase | |
 | 5 | Incidents 2, 3, 4 + Incident 1 "after" full artifact set for all four | This is where the majority of effort goes |
@@ -203,7 +205,7 @@ Incident 1's "before" run **must happen before or during Phase 4** (policy rollo
 ## 11. Open Questions / Risks
 
 - Confirm Grafana Cloud free-tier limits (10k series / 50GB logs+traces) are sufficient for the chaos-testing volume monitor usage from Phase 3 onward
-- Confirm new-account RDS free-tier eligibility (750 hrs/month `db.t3.micro` for 12 months) affects cost-log assumptions
+- Decide whether any final real-AWS smoke test is worth the cost; if not, document LocalStack/Kind evidence clearly
 - Decide the exact mechanism for triggering the settlement callback in Incident 2 (internal job/cron vs. manual trigger script) must be lightweight, not a third service
 - Decide monthly request-volume assumption for error-budget math before Phase 3 (needed for all postmortem calculations)
 
@@ -211,4 +213,4 @@ Incident 1's "before" run **must happen before or during Phase 4** (policy rollo
 
 ## 12. Definition of Done
 
-PayRail v1 is complete when: the infrastructure deploys via GitOps, all 3 Kyverno policies are enforced, the SLO and both burn-rate alerts are live and have fired at least once each across the incident set, and all four incidents have a complete artifact set (alert, investigation, runbook, postmortem with burn-rate math, remediation) committed to the repo.
+PayRail v1 is complete when: the infrastructure workflow runs locally, the application deploys via GitOps, all 3 Kyverno policies are enforced, the SLO and both burn-rate alerts are live and have fired at least once each across the incident set, and all four incidents have a complete artifact set (alert, investigation, runbook, postmortem with burn-rate math, remediation) committed to the repo.

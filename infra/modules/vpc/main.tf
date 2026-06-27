@@ -27,15 +27,16 @@ resource "aws_internet_gateway" "main" {
 resource "aws_subnet" "public" {
   count                   = length(var.availability_zones)
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 2, count.index)
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
   availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-public-subnet-${count.index + 1}"
-      Type = "Public"
+      Name                     = "${var.environment}-public-subnet-${count.index + 1}"
+      Type                     = "Public"
+      "kubernetes.io/role/elb" = "1"
     }
   )
 }
@@ -44,14 +45,31 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private" {
   count             = length(var.availability_zones)
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 2, count.index + length(var.availability_zones))
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + length(var.availability_zones))
   availability_zone = var.availability_zones[count.index]
 
   tags = merge(
     var.common_tags,
     {
-      Name = "${var.environment}-private-subnet-${count.index + 1}"
-      Type = "Private"
+      Name                              = "${var.environment}-private-subnet-${count.index + 1}"
+      Type                              = "Private"
+      "kubernetes.io/role/internal-elb" = "1"
+    }
+  )
+}
+
+# Database Subnets (one per AZ)
+resource "aws_subnet" "database" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + (length(var.availability_zones) * 2))
+  availability_zone = var.availability_zones[count.index]
+
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.environment}-database-subnet-${count.index + 1}"
+      Type = "Database"
     }
   )
 }
@@ -136,7 +154,7 @@ resource "aws_route_table_association" "private" {
 # Network ACL for added security (optional)
 resource "aws_network_acl" "main" {
   vpc_id     = aws_vpc.main.id
-  subnet_ids = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
+  subnet_ids = concat(aws_subnet.public[*].id, aws_subnet.private[*].id, aws_subnet.database[*].id)
 
   ingress {
     protocol   = -1

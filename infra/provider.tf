@@ -7,16 +7,25 @@ terraform {
       version = "~> 5.0"
     }
   }
-
-  backend "s3" {
-    bucket         = "terraform-state-bucket-"
-    key            = "infra/terraform.tfstate"
-    region         = var.aws_region
-    encrypt        = true
-    dynamodb_table = "terraform-locks"
-  }
 }
 
 provider "aws" {
-  region = var.aws_region
+  region                      = var.aws_region
+  access_key                  = "test"
+  secret_key                  = "test"
+  s3_use_path_style           = true
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  endpoints {
+    dynamodb       = var.localstack_endpoint
+    ec2            = var.localstack_endpoint
+    eks            = var.localstack_endpoint
+    iam            = var.localstack_endpoint
+    rds            = var.localstack_endpoint
+    s3             = var.localstack_endpoint
+    secretsmanager = var.localstack_endpoint
+    sts            = var.localstack_endpoint
+  }
 }

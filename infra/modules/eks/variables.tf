@@ -3,7 +3,7 @@ variable "cluster_name" {
 }
 
 variable "cluster_version" {
-  type = string
+  type    = string
   default = "1.34"
 }
 
@@ -16,21 +16,21 @@ variable "private_subnet_ids" {
 }
 
 variable "node_instance_types" {
-  type = list(string)
+  type    = list(string)
   default = ["t3.medium"]
 }
 
 variable "desired_size" {
-  type = number
+  type    = number
   default = 2
 }
 
 variable "min_size" {
-  type = number
+  type    = number
   default = 2
 }
 
 variable "max_size" {
-  type = number
+  type    = number
   default = 5
 }

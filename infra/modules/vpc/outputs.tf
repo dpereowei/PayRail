@@ -9,7 +9,7 @@ output "vpc_cidr_block" {
 }
 
 output "private_subnet_ids" {
-  description = "IDs of private subnets (EKS nodes)"
+  description = "IDs of private subnets for internal workloads"
   value       = aws_subnet.private[*].id
 }
 
